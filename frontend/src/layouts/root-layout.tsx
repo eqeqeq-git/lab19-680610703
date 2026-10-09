@@ -62,7 +62,8 @@ export default function RootLayout() {
           ระบบลงทะเบียนเรียน{" "}
           {role === "ADMIN"
             ? "ฝั่งผู้ดูแลระบบ"
-            : "ฝั่งนักศึกษา จัดทำโดย นศ. ชื่อ-สกุล student name รหัส นศ. student id"}
+            : "ฝั่งนักศึกษา"}{" "}
+          จัดทำโดย ภาคิน วัฒน์เอก รหัสนักศึกษา 680610703
         </footer>
       </SidebarInset>
     </SidebarProvider>

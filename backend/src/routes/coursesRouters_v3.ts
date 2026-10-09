@@ -33,6 +33,10 @@ router.get(
         data: courses,
       });
     } catch (err) {
+      console.error(
+        "GET /api/v3/courses failed:",
+        err instanceof Error ? err.name : "Unknown error",
+      );
       return res.status(200).json({
         success: false,
         message: "Something is wrong, please try again",

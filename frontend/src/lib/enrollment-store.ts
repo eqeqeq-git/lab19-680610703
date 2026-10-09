@@ -51,7 +51,14 @@ type EnrollmentStore = {
   removeCourse: (courseId: string) => Promise<void>;
   /** POST /enrollments — throw ApiError ถ้า Backend ไม่รับ */
   enroll: (studentId: string, courseId: string) => Promise<void>;
-  // TODO การบ้าน 2.3: action เปลี่ยนวิชา (PUT /enrollments) และยกเลิก (DELETE /enrollments)
+  /** PUT /enrollments — change an enrollment to another course */
+  changeEnrollment: (
+    studentId: string,
+    courseId: string,
+    newCourseId: string,
+  ) => Promise<void>;
+  /** DELETE /enrollments — drop an enrollment */
+  dropEnrollment: (studentId: string, courseId: string) => Promise<void>;
 };
 
 export const useEnrollmentStore = create<EnrollmentStore>()((set) => ({
@@ -64,16 +71,30 @@ export const useEnrollmentStore = create<EnrollmentStore>()((set) => ({
   getAll: async (role, studentId) => {
     set({ loading: true, error: null });
     try {
+      const load = async <T>(
+        resource: string,
+        request: () => Promise<T>,
+      ): Promise<T> => {
+        try {
+          return await request();
+        } catch (err) {
+          const message =
+            err instanceof Error ? err.message : "Unknown request error";
+          throw new Error(`${resource}: ${message}`, { cause: err });
+        }
+      };
       const studentsRequest =
         role === "ADMIN"
-          ? api<ApiStudent[]>("/students")
+          ? load("students", () => api<ApiStudent[]>("/students"))
           : studentId
-            ? api<ApiStudent>(`/students/${studentId}`).then((s) => [s])
+            ? load("students", () =>
+                api<ApiStudent>(`/students/${studentId}`).then((s) => [s]),
+              )
             : Promise.resolve([] as ApiStudent[]);
       const [students, courses, enrollments] = await Promise.all([
         studentsRequest,
-        api<Course[]>("/courses"),
-        api<ApiEnrollment[]>("/enrollments"),
+        load("courses", () => api<Course[]>("/courses")),
+        load("enrollments", () => api<ApiEnrollment[]>("/enrollments")),
       ]);
       set({
         students: students.map(fromApiStudent),
@@ -95,16 +116,55 @@ export const useEnrollmentStore = create<EnrollmentStore>()((set) => ({
       error: null,
     }),
 
-  addStudent: async () => {
-    throw new Error("TODO การบ้าน 1.3: ยังไม่ได้เชื่อม POST /students");
+  addStudent: async (student) => {
+    const created = await api<ApiStudent>("/students", {
+      method: "POST",
+      body: {
+        studentId: student.studentId,
+        firstName: student.firstName,
+        lastName: student.lastName,
+        program: student.program,
+        interests: student.interests ?? [],
+        emails: (student.emails ?? []).map((email) => email.address),
+      },
+    });
+    set((state) => ({ students: [...state.students, fromApiStudent(created)] }));
   },
 
-  updateStudent: async () => {
-    throw new Error("TODO การบ้าน 1.3: ยังไม่ได้เชื่อม PUT /students");
+  updateStudent: async (student) => {
+    const updated = await api<ApiStudent>("/students", {
+      method: "PUT",
+      body: {
+        studentId: student.studentId,
+        firstName: student.firstName,
+        lastName: student.lastName,
+        program: student.program,
+        interests: student.interests ?? [],
+        emails: (student.emails ?? []).map((email) => email.address),
+      },
+    });
+    set((state) => ({
+      students: state.students.map((current) =>
+        current.studentId === updated.studentId
+          ? fromApiStudent(updated)
+          : current,
+      ),
+    }));
   },
 
-  removeStudent: async () => {
-    throw new Error("TODO การบ้าน 1.3: ยังไม่ได้เชื่อม DELETE /students");
+  removeStudent: async (studentId) => {
+    await api("/students", {
+      method: "DELETE",
+      body: { studentId },
+    });
+    set((state) => ({
+      students: state.students.filter(
+        (student) => student.studentId !== studentId,
+      ),
+      enrollments: state.enrollments.filter(
+        (enrollment) => enrollment.studentId !== studentId,
+      ),
+    }));
   },
 
   addCourse: async (course) => {
@@ -145,6 +205,35 @@ export const useEnrollmentStore = create<EnrollmentStore>()((set) => ({
     });
     set((state) => ({
       enrollments: [...state.enrollments, fromApiEnrollment(created)],
+    }));
+  },
+
+  changeEnrollment: async (studentId, courseId, newCourseId) => {
+    const updated = await api<ApiEnrollment>("/enrollments", {
+      method: "PUT",
+      body: { studentId, courseId, newCourseId },
+    });
+    set((state) => ({
+      enrollments: state.enrollments.map((enrollment) =>
+        enrollment.studentId === studentId &&
+        enrollment.courseId === courseId
+          ? fromApiEnrollment(updated)
+          : enrollment,
+      ),
+    }));
+  },
+
+  dropEnrollment: async (studentId, courseId) => {
+    await api("/enrollments", {
+      method: "DELETE",
+      body: { studentId, courseId },
+    });
+    set((state) => ({
+      enrollments: state.enrollments.filter(
+        (enrollment) =>
+          enrollment.studentId !== studentId ||
+          enrollment.courseId !== courseId,
+      ),
     }));
   },
 }));
